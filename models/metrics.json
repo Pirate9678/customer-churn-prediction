@@ -1,0 +1,78 @@
+{
+  "data_source": "IBM Telco Customer Churn (public mirror, see README)",
+  "data_rows": 7043,
+  "train_rows": 5634,
+  "test_rows": 1409,
+  "test_size": 0.2,
+  "random_state": 42,
+  "churn_rate_overall": 0.2654,
+  "best_params": {
+    "class_weight": "balanced",
+    "max_depth": 15,
+    "min_samples_leaf": 2,
+    "n_estimators": 300
+  },
+  "best_cv_f1": 0.6273,
+  "test_metrics": {
+    "accuracy": 0.7622,
+    "precision": 0.5396,
+    "recall": 0.7112,
+    "f1": 0.6136,
+    "roc_auc": 0.8351,
+    "confusion_matrix": [
+      [
+        808,
+        227
+      ],
+      [
+        108,
+        266
+      ]
+    ]
+  },
+  "top_10_features": [
+    {
+      "feature": "tenure",
+      "importance": 0.1262
+    },
+    {
+      "feature": "TotalCharges",
+      "importance": 0.1203
+    },
+    {
+      "feature": "Contract_Month-to-month",
+      "importance": 0.1011
+    },
+    {
+      "feature": "MonthlyCharges",
+      "importance": 0.0946
+    },
+    {
+      "feature": "Contract_Two year",
+      "importance": 0.0509
+    },
+    {
+      "feature": "OnlineSecurity_No",
+      "importance": 0.0485
+    },
+    {
+      "feature": "TechSupport_No",
+      "importance": 0.0395
+    },
+    {
+      "feature": "InternetService_Fiber optic",
+      "importance": 0.0372
+    },
+    {
+      "feature": "PaymentMethod_Electronic check",
+      "importance": 0.0332
+    },
+    {
+      "feature": "OnlineBackup_No",
+      "importance": 0.018
+    }
+  ],
+  "trained_on": "2026-11-01",
+  "model": "RandomForestClassifier (scikit-learn)",
+  "preprocessor": "ColumnTransformer: median-impute + scale numerics; most-frequent impute + one-hot categoricals"
+}
