@@ -54,20 +54,23 @@ customer-churn-prediction/
 │   ├── train_large.py               # scale training: 1M rows, timed, no grid search
 │   └── predict.py                   # CLI: churn prediction for one JSON record
 ├── models/
-│   ├── random_forest_churn.pkl      # trained Random Forest (7k baseline)
-│   ├── preprocessor.pkl             # fitted ColumnTransformer
-│   ├── metrics.json                 # exact measured metrics (source of truth)
-│   ├── feature_importance.png       # top-15 churn drivers chart
-│   ├── metrics_large.json           # measured metrics, 1M-row run
-│   └── feature_importance_large.png # churn drivers, 1M-row run
+│   ├── random_forest_churn.pkl.gz      # trained Random Forest (7k baseline)
+│   ├── preprocessor.pkl                # fitted ColumnTransformer
+│   ├── random_forest_churn_large.pkl.gz# trained Random Forest (1M-row run)
+│   ├── preprocessor_large.pkl          # fitted ColumnTransformer (large run)
+│   ├── metrics.json                    # exact measured metrics (source of truth)
+│   ├── feature_importance.png          # top-15 churn drivers chart
+│   ├── metrics_large.json              # measured metrics, 1M-row run
+│   └── feature_importance_large.png    # churn drivers, 1M-row run
 ├── requirements.txt
 └── README.md
 ```
 
-> `models/*.pkl` and the 159 MB `data/telco_churn_large.csv` are build
-> artifacts (git-ignored) — regenerate them with the scripts below. The
-> committed metrics, plots, code, and real 7k dataset are the reviewable
-> record.
+> Model binaries are stored gzip-compressed (`*.pkl.gz`) because GitHub's
+> web upload caps files at 25 MB (the raw pickles are 32–36 MB).
+> `src/predict.py` loads `.pkl` or `.pkl.gz` transparently. The 159 MB
+> `data/telco_churn_large.csv` stays a git-ignored build artifact —
+> regenerate it with `python data/generate_large_dataset.py`.
 
 ## How to run
 
