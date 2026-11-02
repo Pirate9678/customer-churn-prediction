@@ -1,7 +1,11 @@
 """Predict churn for a single customer record.
 
-Loads models/preprocessor.pkl and models/random_forest_churn.pkl, applies the
-same preprocessing used in training, and prints a JSON prediction.
+Loads the fitted preprocessor and trained Random Forest from models/,
+applies the same preprocessing used in training, and prints a JSON prediction.
+
+Model artifacts are stored gzip-compressed (*.pkl.gz) to stay under GitHub's
+per-file upload limit; plain *.pkl files are used automatically when present
+(e.g. after running src/train.py locally).
 
 Usage:
     # JSON record passed directly:
@@ -15,8 +19,10 @@ without customerID/Churn). Missing columns are imputed by the pipeline;
 unknown categorical values are ignored.
 """
 
+import gzip
 import json
 import os
+import pickle
 import sys
 
 import pandas as pd
@@ -30,6 +36,20 @@ PREPROCESSOR_PATH = os.path.join(ROOT, "models", "preprocessor.pkl")
 MODEL_PATH = os.path.join(ROOT, "models", "random_forest_churn.pkl")
 
 
+def load_artifact(path):
+    """Load a pickle artifact, transparently supporting a .pkl.gz fallback."""
+    if os.path.exists(path):
+        return load_pickle(path)
+    gz_path = path + ".gz"
+    if os.path.exists(gz_path):
+        with gzip.open(gz_path, "rb") as fh:
+            return pickle.load(fh)
+    raise FileNotFoundError(
+        f"model artifact not found: looked for {path} and {gz_path}. "
+        "Run src/train.py to generate them."
+    )
+
+
 def risk_label(probability: float) -> str:
     if probability >= 0.7:
         return "High"
@@ -39,8 +59,8 @@ def risk_label(probability: float) -> str:
 
 
 def predict_record(record: dict) -> dict:
-    preprocessor = load_pickle(PREPROCESSOR_PATH)
-    model = load_pickle(MODEL_PATH)
+    preprocessor = load_artifact(PREPROCESSOR_PATH)
+    model = load_artifact(MODEL_PATH)
 
     frame = pd.DataFrame([{c: record.get(c) for c in FEATURE_COLUMNS}])
     Xt = preprocessor.transform(frame)
