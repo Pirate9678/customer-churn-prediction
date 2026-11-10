@@ -72,7 +72,7 @@
       "importance": 0.018
     }
   ],
-  "trained_on": "2026-11-01",
+  "trained_on": "2026-11-10",
   "model": "RandomForestClassifier (scikit-learn)",
   "preprocessor": "ColumnTransformer: median-impute + scale numerics; most-frequent impute + one-hot categoricals"
 }
