@@ -96,6 +96,24 @@ def generate(n_rows, seed=42, chunk=200_000, output_path=None):
     real_features = real[feature_cols].reset_index(drop=True)
     real_cells = real[CELL_KEYS].reset_index(drop=True)
 
+    # Vectorised cell-rate lookup (optimised Nov 2026): the old code built
+    # a Python tuple per synthetic row and did a dict lookup per row
+    # (~200k lookups per chunk). Instead, encode each real row's
+    # (Contract, tenure-bucket, InternetService) cell once as an integer id
+    # and index a rate array with it — the synthetic row's cell is just the
+    # sampled real row's cell, so no per-row work remains. The probabilities
+    # are identical, so the RNG stream (and therefore the output file) is
+    # unchanged.
+    real_keys = list(zip(real_cells["Contract"],
+                         real_cells["tenure_bucket"].astype(str),
+                         real_cells["InternetService"]))
+    # factorize (not np.unique: it flattens tuples) gives one integer id
+    # per distinct (Contract, bucket, InternetService) cell; its uniques
+    # array is in the same first-appearance order as the codes.
+    real_cell_id, unique_keys = pd.factorize(
+        pd.Series(real_keys, dtype=object))
+    rate_by_cell = np.array([rates.get(k, global_rate) for k in unique_keys])
+
     if output_path is None:
         output_path = os.path.join(ROOT, "data", "telco_churn_large.csv")
     first = True
@@ -105,18 +123,16 @@ def generate(n_rows, seed=42, chunk=200_000, output_path=None):
         size = min(chunk, n_rows - made)
         idx = rng.integers(0, len(real_features), size=size)
         synth = real_features.iloc[idx].copy()
-        cells = real_cells.iloc[idx]
 
-        # Vectorised cell-rate lookup.
-        key = list(
-            zip(cells["Contract"], cells["tenure_bucket"].astype(str),
-                cells["InternetService"])
-        )
-        proba = np.array([rates.get(k, global_rate) for k in key])
+        # Vectorised cell-rate lookup: the sampled real rows' cell ids.
+        proba = rate_by_cell[real_cell_id[idx]]
         churn = rng.binomial(1, proba)
 
         out = pd.DataFrame(index=range(made, made + size))
-        out[ID_COLUMN] = [f"SYN-{i:07d}" for i in range(made, made + size)]
+        # Vectorised IDs (was a per-row f-string loop).
+        out[ID_COLUMN] = np.char.add(
+            "SYN-", np.char.zfill(np.arange(made, made + size).astype(str), 7)
+        )
         for col in feature_cols:
             out[col] = synth[col].to_numpy()
         out[TARGET_COLUMN] = np.where(churn == 1, "Yes", "No")
