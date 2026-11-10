@@ -1,0 +1,94 @@
+{
+  "baseline": {
+    "generate_1m2": 9.6,
+    "train_7k_wall": 76.1,
+    "train_large_wall": 117.8,
+    "train_large_fit": 92.5,
+    "predict_cold": 3.5
+  },
+  "experiments": {
+    "setup_note": "shared 1M/200k split + preprocessing, 15.8s; fit times only below",
+    "configs": {
+      "baseline_100trees": {
+        "fit_s": 111.9,
+        "accuracy": 0.7527,
+        "precision": 0.5277,
+        "recall": 0.7486,
+        "f1": 0.619,
+        "roc_auc": 0.8252
+      },
+      "trees50": {
+        "fit_s": 49.5,
+        "accuracy": 0.753,
+        "precision": 0.5281,
+        "recall": 0.7478,
+        "f1": 0.619,
+        "roc_auc": 0.8252
+      },
+      "maxsamp0.5": {
+        "fit_s": 89.7,
+        "accuracy": 0.7524,
+        "precision": 0.5273,
+        "recall": 0.7482,
+        "f1": 0.6187,
+        "roc_auc": 0.8251
+      },
+      "trees50+maxsamp0.5_ADOPTED": {
+        "fit_s": 32.9,
+        "accuracy": 0.7523,
+        "precision": 0.5271,
+        "recall": 0.7483,
+        "f1": 0.6185,
+        "roc_auc": 0.8252
+      },
+      "depth10": {
+        "fit_s": 86.2,
+        "accuracy": 0.7532,
+        "precision": 0.5284,
+        "recall": 0.7481,
+        "f1": 0.6193,
+        "roc_auc": 0.8253
+      },
+      "hgb_REJECTED": {
+        "fit_s": 92.5,
+        "accuracy": 0.7826,
+        "precision": 0.6348,
+        "recall": 0.4472,
+        "f1": 0.5247,
+        "roc_auc": 0.8258,
+        "note": "no faster than RF, and recall collapses 0.75 -> 0.45 at the 0.5 threshold \u2014 wrong trade-off for retention"
+      }
+    }
+  },
+  "measured": {
+    "generate_1m2": {
+      "s": 11.99,
+      "peak_rss_mb": 233,
+      "output_md5_matches_committed_csv": true
+    },
+    "predict_cold": {
+      "s": 4.39,
+      "peak_rss_mb": 233,
+      "demo_probability": 0.9087
+    },
+    "predict_batch_10k": {
+      "s": 3.77,
+      "peak_rss_mb": 233,
+      "load_s": 0.2,
+      "score_s": 0.73,
+      "note": "no baseline \u2014 new capability; one cold start amortised over 10k rows"
+    },
+    "train_7k_wall": {
+      "s": 77.98,
+      "peak_rss_mb": 237,
+      "metrics_unchanged": true
+    },
+    "train_large_wall": {
+      "s": 69.42,
+      "peak_rss_mb": 1547
+    },
+    "train_large_fit": {
+      "s": 43.5
+    }
+  }
+}
