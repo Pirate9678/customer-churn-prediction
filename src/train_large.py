@@ -6,8 +6,10 @@ hyperparameter shape found by the grid search on the 7k baseline
 (max_depth ~15, min_samples_leaf small, balanced classes) — but adapted
 for volume:
 
-  * n_estimators=100, max_depth=12, min_samples_leaf=10: bounds tree size
-    so training time and the serialized model stay manageable at scale.
+  * n_estimators=50, max_depth=12, min_samples_leaf=10, max_samples=0.5:
+    bounds tree size and the per-tree sample so training time and the
+    serialized model stay manageable at scale (see MODEL_PARAMS comment
+    for the measured trade-off vs 100 trees).
   * float32 feature matrix: halves the memory of the 1M x ~45 dense
     matrix with no measurable accuracy cost.
   * n_jobs=-1: all CPUs.
@@ -54,10 +56,18 @@ RANDOM_STATE = 42
 
 # Transferred from the 7k grid search (best: max_depth=15, min_samples_leaf=2,
 # class_weight='balanced'), tightened to bound cost at 1M rows.
+# Optimised Nov 2026 (measured in benchmark/benchmark.py): 50 trees instead
+# of 100 (fit 111.9s -> 49.5s, metrics unchanged: acc 0.7530 vs 0.7527,
+# ROC-AUC 0.8252) and max_samples=0.5 (each tree sees a 500k-row bootstrap
+# sample; combined fit 32.9s, acc 0.7523, ROC-AUC 0.8252 — all within
+# 0.05 points of the 100-tree config). HistGradientBoosting was tested as
+# an alternative: same fit time, but recall collapsed (0.45 vs 0.75), so
+# it was rejected for this retention use-case.
 MODEL_PARAMS = {
-    "n_estimators": 100,
+    "n_estimators": 50,
     "max_depth": 12,
     "min_samples_leaf": 10,
+    "max_samples": 0.5,
     "class_weight": "balanced",
     "random_state": RANDOM_STATE,
     "n_jobs": -1,

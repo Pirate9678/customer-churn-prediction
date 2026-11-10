@@ -102,8 +102,12 @@ def main():
     X_test_t = preprocessor.transform(X_test)
     feature_names = get_feature_names(preprocessor)
 
+    # RF n_jobs=1 (not -1) is deliberate: GridSearchCV already parallelises
+    # the 48 fits across cores, and nesting a second -1 inside each fit
+    # oversubscribes this host's shared CPUs — measured 57.0s vs 65.0s for
+    # the grid fit, with byte-identical results (same random_state).
     grid = GridSearchCV(
-        RandomForestClassifier(random_state=RANDOM_STATE, n_jobs=-1),
+        RandomForestClassifier(random_state=RANDOM_STATE, n_jobs=1),
         param_grid=PARAM_GRID,
         cv=3,
         scoring="f1",
