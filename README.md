@@ -63,11 +63,17 @@ customer-churn-prediction/
 │   ├── metrics_large.json              # measured metrics, 1M-row run
 │   └── feature_importance_large.png    # churn drivers, 1M-row run
 ├── requirements.txt
+├── benchmark/
+│   ├── benchmark.py                # before/after timings (run it to re-measure)
+│   └── results.json                # measured timings + config-sweep results
 └── README.md
 ```
 
 > Model binaries are stored gzip-compressed (`*.pkl.gz`) because GitHub's
-> web upload caps files at 25 MB (the raw pickles are 32–36 MB).
+> web upload caps files at 25 MB. The raw pickles are 33 MB (7k model) and
+> 23 MB (1M-row model — it now fits under the cap on its own after the
+> Nov 2026 optimisation halved the tree count, but it is still shipped
+> as `.pkl.gz` for consistency).
 > `src/predict.py` loads `.pkl` or `.pkl.gz` transparently. The 159 MB
 > `data/telco_churn_large.csv` stays a git-ignored build artifact —
 > regenerate it with `python data/generate_large_dataset.py`.
@@ -147,24 +153,27 @@ and the README labels it synthetic wherever it appears.
 test rows (stratified), same `ColumnTransformer`, `RandomForestClassifier`
 with the hyperparameter shape transferred from the tuned baseline
 (`max_depth=12`, `min_samples_leaf=10`, `class_weight="balanced"`,
-100 trees — tightened to bound cost; no grid search at this scale),
-float32 feature matrix, all CPUs. Fit time: **83.9 s** (~11,900 rows/s);
-total wall time 105 s on a 4-vCPU host.
+50 trees with `max_samples=0.5` — halved from 100 trees and each tree
+trained on a 500k-row bootstrap sample, Nov 2026 optimisation; no grid
+search at this scale), float32 feature matrix, all CPUs. Fit time:
+**43.5 s** (~23,000 rows/s); total wall time 69.4 s on a 4-vCPU host
+(before the optimisation: 92.5 s fit, 117.8 s wall — see
+Performance & scaling).
 
 **Measured results** (from `models/metrics_large.json`, 200k held-out rows):
 
 | Metric | 1M-row run | 7k baseline |
 |---|---|---|
-| Accuracy | 0.7527 | 0.7622 |
-| Precision | 0.5277 | 0.5396 |
-| Recall | 0.7486 | 0.7112 |
-| F1 | 0.6190 | 0.6136 |
+| Accuracy | 0.7523 | 0.7622 |
+| Precision | 0.5271 | 0.5396 |
+| Recall | 0.7483 | 0.7112 |
+| F1 | 0.6185 | 0.6136 |
 | ROC-AUC | 0.8252 | 0.8351 |
 
 The metrics barely move between 7k and 1M rows — the model generalizes
 rather than memorizing — and the top drivers are the same real-world
-signals (`Contract = Month-to-month` 0.186, `tenure` 0.156,
-`Contract = Two year` 0.117, `InternetService = Fiber optic` 0.092).
+signals (`Contract = Month-to-month` 0.175, `tenure` 0.165,
+`InternetService = Fiber optic` 0.103, `Contract = Two year` 0.102).
 Full chart: `models/feature_importance_large.png`.
 
 ## Top 5 churn drivers (Random Forest feature importance)
@@ -227,6 +236,77 @@ Example output:
 
 Risk bands: `High` ≥ 0.70, `Medium` ≥ 0.40, else `Low`. You can also read a
 record from a file: `python src/predict.py --file customer.json`.
+
+**Batch scoring** — a single-record call pays ~3–4 s of interpreter +
+sklearn import and ~0.5 s of artifact loading for one row. For many rows,
+score a whole CSV in one process instead (artifacts load once, then one
+vectorised transform/predict pass):
+
+```bash
+python src/predict.py --batch customers.csv [--output scored.csv]
+# scored 10,000 rows -> customers_scored.csv (load 0.2s, score 0.73s)
+```
+
+The output CSV is the input rows with `churn_probability`,
+`churn_prediction`, `churn_label`, and `risk` appended. Probabilities match
+single-record scoring to the 4 decimals written in the file.
+
+## Performance & scaling (optimised Nov 2026)
+
+Measured on this 4-vCPU host; full numbers in `benchmark/results.json`
+(re-run with `.venv/bin/python benchmark/benchmark.py`, ~6 min).
+"Before" is the pre-optimisation code measured 10 Nov 2026 on the same host.
+
+| Step | Before | After | Change |
+|---|---|---|---|
+| Generate 1.2M synthetic rows | 9.6 s | 12.0 s | no change (I/O-bound; see below) |
+| Train 7k (full grid search) | 76.1 s | 78.0 s | no change; metrics identical |
+| Train 1M — fit | 92.5 s | 43.5 s | **2.1× faster** |
+| Train 1M — total wall | 117.8 s | 69.4 s | **1.7× faster** |
+| Predict, single record (cold) | 3.5 s | 4.4 s | no change (import-bound) |
+| Predict, batch of 10k rows | — | 3.8 s wall (0.2 s load + 0.7 s score) | new capability |
+
+**What changed**
+
+- **Large model: 100 → 50 trees, `max_samples=0.5`.** A config sweep on
+  the shared 1M/200k split (see `benchmark/results.json`, "experiments")
+  found 50 trees alone halves the fit (111.9 s → 49.5 s) with metrics
+  unchanged (accuracy 0.7530 vs 0.7527, ROC-AUC 0.8252), and adding
+  `max_samples=0.5` reaches 32.9 s at accuracy 0.7523 / ROC-AUC 0.8252 —
+  every metric within 0.05 points of the 100-tree model. The shipped model
+  is also half the size (23 MB vs 36 MB raw pickle).
+- **Generator: per-row Python loops removed.** The churn-rate lookup is
+  now a vectorised array index (`rate_by_cell[cell_id]`, cells encoded
+  once with `pd.factorize`) and the `SYN-…` IDs are built with
+  `np.char` instead of a per-row f-string loop. Output is byte-identical
+  to the old generator (md5-checked in the benchmark).
+- **`prepare_frame`: the regex pre-pass on `TotalCharges` is gone.**
+  `pd.to_numeric(errors="coerce")` already turns blank strings into NaN;
+  verified identical output on both CSVs.
+- **Grid search: the forest inside `GridSearchCV` now runs `n_jobs=1`.**
+  The grid already parallelises the 48 fits; nesting a second `-1` inside
+  each fit oversubscribes the host's shared CPUs (grid fit 57.0 s vs
+  65.0 s in a controlled comparison, identical best params and metrics).
+- **`predict.py --batch`:** load the artifacts once, score a whole CSV.
+
+**What was deliberately not changed, and why**
+
+- **The 7k model and its metrics are untouched** (accuracy 0.7622,
+  ROC-AUC 0.8351) — the grid search already finds the best config, and the
+  full run is dominated by 48 small fits, not by any one bottleneck.
+- **No faster estimator.** HistGradientBoosting was tested on the 1M
+  split: same fit time as the forest, but recall collapsed (0.45 vs 0.75)
+  at the 0.5 threshold — the wrong trade-off for a retention use-case,
+  even though its accuracy looked higher (0.7826).
+- **No early-float32 preprocessing.** Casting numerics to float32 before
+  the `ColumnTransformer` would only remove a 0.03 s `.astype` copy; the
+  7.2 s transformer itself is the cost, and float32 scaling could shift
+  split thresholds. Not worth the risk for ~0 s.
+- **Generator and single-record predict wall times are unchanged** because
+  both are I/O- or import-bound, not compute-bound: ~2/3 of the generator
+  is `to_csv`, and ~2.5 s of a ~3.5 s `predict.py` call is importing
+  sklearn/pandas/numpy. The batch mode is the honest fix for repeated
+  scoring, not a faster import.
 
 ## Reproducibility
 

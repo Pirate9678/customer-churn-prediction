@@ -23,6 +23,7 @@ dist/
 # metrics and plots are committed instead)
 models/*.pkl
 data/telco_churn_large.csv
+benchmark/tmp/
 
 # Editors
 .vscode/
